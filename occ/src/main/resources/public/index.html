@@ -9,17 +9,79 @@
 <body>
 <h1>Centrale Operativa</h1>
 
-<h2>Stazioni</h2>
-<table>
-    <thead><tr><th>Id</th><th>Nome</th><th>Stato</th><th>Ultimo heartbeat</th></tr></thead>
-    <tbody id="stations"></tbody>
-</table>
+<form id="login-form">
+    <h2>Accesso</h2>
+    <p><label>Utente <input name="username" required autocomplete="username"></label></p>
+    <p><label>Password <input name="password" type="password" required autocomplete="current-password"></label></p>
+    <p><button>Entra</button> <span id="login-error" class="error"></span></p>
+</form>
 
-<h2>Treni</h2>
-<table>
-    <thead><tr><th>Treno</th><th>Stato</th><th>Direzione</th><th>Ultima stazione</th><th>Prossima</th><th>Arrivo previsto</th><th>Ritardo</th></tr></thead>
-    <tbody id="trains"></tbody>
-</table>
+<div id="app" hidden>
+    <p>Utente: <span id="user"></span> <button id="logout">Esci</button></p>
+    <p id="action-error" class="error"></p>
+
+    <h2>Allarmi</h2>
+    <table>
+        <thead><tr><th>Ora</th><th>Messaggio</th></tr></thead>
+        <tbody id="alerts"></tbody>
+    </table>
+
+    <h2>Guasti</h2>
+    <table>
+        <thead><tr><th>Stazione</th><th>Guasto</th><th>Stato</th><th>Segnalato</th><th>Operatori inviati da</th><th></th></tr></thead>
+        <tbody id="faults"></tbody>
+    </table>
+
+    <h2>Stazioni</h2>
+    <table>
+        <thead><tr><th>Id</th><th>Nome</th><th>Stato</th><th>Dettaglio</th><th>Ultimo heartbeat</th><th></th></tr></thead>
+        <tbody id="stations"></tbody>
+    </table>
+
+    <div id="expected" hidden>
+        <h2>Treni attesi nella stazione <span id="expected-station"></span></h2>
+        <h3>In arrivo</h3>
+        <table>
+            <thead><tr><th>Treno</th><th>Proveniente da</th><th>Arrivo previsto</th><th>Ritardo</th></tr></thead>
+            <tbody id="arriving"></tbody>
+        </table>
+        <h3>In stazione, in attesa di partire</h3>
+        <table>
+            <thead><tr><th>Treno</th><th>Prossima fermata</th><th>Ritardo</th></tr></thead>
+            <tbody id="in-station"></tbody>
+        </table>
+    </div>
+
+    <h2>Treni</h2>
+    <table>
+        <thead><tr><th>Treno</th><th>Stato</th><th>Direzione</th><th>Ultima stazione</th><th>Prossima</th><th>Arrivo previsto</th><th>Ritardo</th><th></th></tr></thead>
+        <tbody id="trains"></tbody>
+    </table>
+
+    <h2>Tratte</h2>
+    <table>
+        <thead><tr><th>Treno</th><th>Direzione</th><th>Fermate</th><th></th></tr></thead>
+        <tbody id="routes"></tbody>
+    </table>
+
+    <form id="route-form" class="admin-only">
+        <h2 id="route-form-title">Nuova tratta</h2>
+        <p><label>Treno <input name="trainId" required></label></p>
+        <p>
+            <label>Direzione
+                <select name="direction">
+                    <option value="A">Andata</option>
+                    <option value="R">Ritorno</option>
+                </select>
+            </label>
+        </p>
+        <p>
+            <label for="stops">Fermate, una per riga: stazione, secondi di viaggio dalla fermata precedente, secondi di sosta</label><br>
+            <textarea id="stops" name="stops" rows="5" cols="40" required placeholder="A 0 0&#10;B 20 5&#10;C 25 0"></textarea>
+        </p>
+        <p><button>Salva</button> <button type="button" id="route-cancel">Annulla</button></p>
+    </form>
+</div>
 
 <script src="app.js"></script>
 </body>

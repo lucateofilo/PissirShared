@@ -5,6 +5,7 @@ CREATE TABLE station (
     id             VARCHAR(10) PRIMARY KEY,
     name           VARCHAR(100) NOT NULL,
     state          VARCHAR(20)  NOT NULL DEFAULT 'OFFLINE',
+    detail         VARCHAR(255),               -- motivo dello stato, ad esempio il tipo di guasto
     last_heartbeat TIMESTAMPTZ
 );
 
@@ -59,13 +60,9 @@ CREATE TABLE fault (
 );
 
 CREATE TABLE alert (
-    id       SERIAL PRIMARY KEY,
-    type     VARCHAR(30)  NOT NULL,
-    severity VARCHAR(10)  NOT NULL,
-    ref      VARCHAR(50),
-    message  VARCHAR(255) NOT NULL,
-    ts       TIMESTAMPTZ  NOT NULL,
-    acked    BOOLEAN      NOT NULL DEFAULT FALSE
+    id      SERIAL PRIMARY KEY,
+    message VARCHAR(255) NOT NULL,
+    ts      TIMESTAMPTZ  NOT NULL
 );
 
 CREATE TABLE app_user (

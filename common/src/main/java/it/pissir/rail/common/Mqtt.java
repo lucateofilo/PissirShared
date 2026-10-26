@@ -22,9 +22,13 @@ import java.util.function.BiConsumer;
  *
  * Rispetto al client Paho aggiunge tre cose:
  * - i messaggi sono oggetti Java convertiti in JSON;
- * - dopo una riconnessione rinnova da solo le sottoscrizioni;
+ * - le sottoscrizioni vengono rinnovate a ogni connessione;
  * - i messaggi ricevuti vengono gestiti su un thread separato, così la callback
  *   di Paho non resta bloccata mentre il servizio pubblica o interroga il database.
+ *
+ * Le sottoscrizioni vanno registrate prima di connect(). Con la sessione persistente,
+ * infatti, il broker consegna i messaggi arrivati durante la disconnessione subito dopo
+ * la connessione, e in quel momento i gestori devono essere già pronti.
  */
 public class Mqtt implements MqttCallbackExtended {
 
@@ -59,6 +63,11 @@ public class Mqtt implements MqttCallbackExtended {
         options.setWill(topic, Json.toBytes(message), 1, true);
     }
 
+    /** Registra il gestore dei messaggi in arrivo su topicFilter. Va chiamato prima di connect(). */
+    public void subscribe(String topicFilter, int qos, BiConsumer<String, String> handler) {
+        subscriptions.put(topicFilter, new Subscription(qos, handler));
+    }
+
     /** Si connette al broker, riprovando ogni 2 secondi finché non ci riesce. */
     public void connect() {
         while (true) {
@@ -69,17 +78,6 @@ public class Mqtt implements MqttCallbackExtended {
             } catch (MqttException e) {
                 log.warn("Broker non raggiungibile ({}), riprovo tra 2 secondi", e.getMessage());
                 sleep(2000);
-            }
-        }
-    }
-
-    public void subscribe(String topicFilter, int qos, BiConsumer<String, String> handler) {
-        subscriptions.put(topicFilter, new Subscription(qos, handler));
-        if (client.isConnected()) {
-            try {
-                client.subscribe(topicFilter, qos);
-            } catch (MqttException e) {
-                log.error("Sottoscrizione a {} fallita", topicFilter, e);
             }
         }
     }
@@ -111,7 +109,7 @@ public class Mqtt implements MqttCallbackExtended {
         if (reconnect) {
             log.info("Riconnesso al broker");
         }
-        // Rinnoviamo le sottoscrizioni su un altro thread: qui siamo dentro la callback di Paho
+        // Le sottoscrizioni si fanno su un altro thread: qui siamo dentro la callback di Paho
         worker.submit(() -> subscriptions.forEach((filter, sub) -> {
             try {
                 client.subscribe(filter, sub.qos());

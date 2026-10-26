@@ -15,7 +15,7 @@ rm -f logs/pids
 run() {
     local name=$1
     shift
-    java -jar "$@" > "logs/$name.log" 2>&1 &
+    java -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -jar "$@" > "logs/$name.log" 2>&1 &
     echo $! >> logs/pids
 }
 

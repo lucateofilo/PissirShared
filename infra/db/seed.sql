@@ -22,3 +22,8 @@ INSERT INTO route_stop (route_id, seq, station_id, travel_time_sec, dwell_sec) V
     (4, 1, 'C', 0, 0),  (4, 2, 'B', 25, 5), (4, 3, 'A', 20, 0);
 
 SELECT setval('route_id_seq', 4);
+
+-- Utenti di prova. Le password (uguali al nome utente) sono salvate cifrate con BCrypt.
+INSERT INTO app_user (username, password_hash, role) VALUES
+    ('tecnico', '$2a$10$XI4K3Oc7bK6FVN6zDw0OceR4eZKiDny6BeE/8tQtJa8iGwqlGFjDG', 'TECH'),
+    ('admin', '$2a$10$NbTI2Po.2NYplbDLL2vy2.QjPK7/KGGOV3NiTHbDKYOYzRZAyvwO2', 'ADMIN');

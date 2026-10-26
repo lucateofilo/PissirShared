@@ -4,6 +4,7 @@ import it.pissir.rail.common.Json;
 import it.pissir.rail.common.Mqtt;
 import it.pissir.rail.common.Topics;
 import it.pissir.rail.common.msg.Transit;
+import it.pissir.rail.occ.alerting.AlertService;
 import it.pissir.rail.occ.db.Database;
 import it.pissir.rail.occ.db.RouteDao;
 import it.pissir.rail.occ.db.TrainDao;
@@ -25,17 +26,21 @@ import java.time.Instant;
 public class Ingestion {
 
     private static final Logger log = LoggerFactory.getLogger(Ingestion.class);
+    // Oltre questo ritardo il treno riceve un avviso
+    private static final int DELAY_NOTICE_SECONDS = 10;
 
     private final Mqtt mqtt;
     private final TransitDao transits;
     private final TrainDao trains;
     private final RouteDao routes;
+    private final AlertService alerts;
 
-    public Ingestion(Mqtt mqtt, Database db) {
+    public Ingestion(Mqtt mqtt, Database db, AlertService alerts) {
         this.mqtt = mqtt;
         this.transits = new TransitDao(db);
         this.trains = new TrainDao(db);
         this.routes = new RouteDao(db);
+        this.alerts = alerts;
     }
 
     public void start() {
@@ -90,5 +95,8 @@ public class Ingestion {
         }
         log.info("Treno {} {} stazione {}, ritardo {} s", t.trainId(),
                 entry ? "entrato in" : "uscito da", t.stationId(), delay == null ? "?" : delay);
+        if (delay != null && delay >= DELAY_NOTICE_SECONDS) {
+            alerts.notifyTrain(t.trainId(), "Ritardo di " + delay + " s");
+        }
     }
 }

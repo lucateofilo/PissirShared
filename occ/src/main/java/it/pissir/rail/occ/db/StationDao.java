@@ -14,14 +14,19 @@ public class StationDao {
     }
 
     public List<Map<String, Object>> findAll() {
-        return db.query("SELECT id, name, state, last_heartbeat FROM station ORDER BY id");
+        return db.query("SELECT id, name, state, detail, last_heartbeat FROM station ORDER BY id");
     }
 
-    public void updateState(String stationId, String state) {
-        db.update("UPDATE station SET state = ? WHERE id = ?", state, stationId);
+    public void updateState(String stationId, String state, String detail) {
+        db.update("UPDATE station SET state = ?, detail = ? WHERE id = ?", state, detail, stationId);
     }
 
     public void updateHeartbeat(String stationId) {
         db.update("UPDATE station SET last_heartbeat = ? WHERE id = ?", Timestamp.from(Instant.now()), stationId);
+    }
+
+    /** All'avvio della centrale lo stato delle stazioni non è noto finché non si fanno sentire. */
+    public void markAllOffline() {
+        db.update("UPDATE station SET state = 'OFFLINE', detail = NULL");
     }
 }

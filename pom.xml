@@ -26,6 +26,7 @@
         <javalin.version>6.3.0</javalin.version>
         <postgresql.version>42.7.4</postgresql.version>
         <junit.version>5.10.3</junit.version>
+        <jbcrypt.version>0.4</jbcrypt.version>
     </properties>
 
     <dependencyManagement>
@@ -64,6 +65,11 @@
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mindrot</groupId>
+                <artifactId>jbcrypt</artifactId>
+                <version>${jbcrypt.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>

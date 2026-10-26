@@ -52,7 +52,28 @@ public class Database {
         }
     }
 
-    private PreparedStatement prepare(Connection conn, String sql, Object... params) throws SQLException {
+    /** Operazione su database da eseguire dentro una transazione. */
+    public interface Work {
+        void run(Connection conn) throws SQLException;
+    }
+
+    /** Esegue work in una transazione: se qualcosa fallisce, nessuna modifica viene salvata. */
+    public void inTransaction(Work work) {
+        try (Connection conn = connect()) {
+            conn.setAutoCommit(false);
+            try {
+                work.run(conn);
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new DatabaseException("transazione", e);
+        }
+    }
+
+    PreparedStatement prepare(Connection conn, String sql, Object... params) throws SQLException {
         PreparedStatement st = conn.prepareStatement(sql);
         for (int i = 0; i < params.length; i++) {
             st.setObject(i + 1, params[i]);

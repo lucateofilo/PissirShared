@@ -5,13 +5,16 @@ import it.pissir.rail.common.Mqtt;
 import it.pissir.rail.common.Topics;
 import it.pissir.rail.common.msg.NextStopReply;
 import it.pissir.rail.common.msg.NextStopRequest;
+import it.pissir.rail.common.msg.StationCommand;
 import it.pissir.rail.occ.db.Database;
 import it.pissir.rail.occ.db.RouteDao;
 import it.pissir.rail.occ.db.TrainDao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Risponde alle stazioni che chiedono la prossima fermata di un treno. */
+import java.util.Map;
+
+/** Decide il percorso dei treni: risponde alle stazioni che chiedono la prossima fermata e gestisce le soppressioni. */
 public class TrafficLogic {
 
     private static final Logger log = LoggerFactory.getLogger(TrafficLogic.class);
@@ -30,6 +33,22 @@ public class TrafficLogic {
         mqtt.subscribe(Topics.NEXT_STOP_REQUEST, 1, (topic, payload) -> onRequest(payload));
     }
 
+    /**
+     * Sopprime un treno fermo in stazione. La stazione annulla la sua partenza e lo avvisa.
+     * Restituisce false se il treno non esiste o non è fermo in una stazione.
+     */
+    public boolean suppress(String trainId) {
+        Map<String, Object> train = trains.find(trainId);
+        if (train == null || !"IN_STATION".equals(train.get("state")) || train.get("last_station") == null) {
+            return false;
+        }
+        String stationId = (String) train.get("last_station");
+        mqtt.publish(Topics.stationCmd(stationId), StationCommand.suppress(trainId), 1, false);
+        trains.setState(trainId, "SUPPRESSED");
+        log.info("Treno {} soppresso nella stazione {}", trainId, stationId);
+        return true;
+    }
+
     private void onRequest(String payload) {
         NextStopRequest req = Json.parse(payload, NextStopRequest.class);
         Schedule schedule = routes.findSchedule(req.trainId(), req.dir());
@@ -45,7 +64,11 @@ public class TrafficLogic {
             reply = next == null
                     ? new NextStopReply(req.reqId(), req.trainId(), null, 0, dwell)
                     : new NextStopReply(req.reqId(), req.trainId(), next.stationId(), next.travelTimeSec(), dwell);
-            trains.setNextStation(req.trainId(), next == null ? null : next.stationId());
+            if (next == null) {
+                trains.setState(req.trainId(), "ARRIVED");
+            } else {
+                trains.setNextStation(req.trainId(), next.stationId());
+            }
         }
         mqtt.publish(Topics.stationNextStopReply(req.stationId()), reply, 1, false);
     }
