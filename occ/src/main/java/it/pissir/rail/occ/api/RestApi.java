@@ -1,6 +1,7 @@
 package it.pissir.rail.occ.api;
 
 import io.javalin.Javalin;
+import io.javalin.community.ssl.SslPlugin;
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.ForbiddenResponse;
@@ -9,6 +10,7 @@ import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.security.RouteRole;
 import jakarta.servlet.http.HttpSession;
+import it.pissir.rail.common.Config;
 import it.pissir.rail.occ.db.AlertDao;
 import it.pissir.rail.occ.db.Database;
 import it.pissir.rail.occ.db.FaultDao;
@@ -31,7 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * API REST per l'interfaccia web. La SPA è servita dalla cartella resources/public.
+ * API REST per l'interfaccia web, solo in HTTPS. La SPA è servita dalla cartella resources/public.
  * L'utente fa login e il server ricorda nella sessione chi è e che ruolo ha.
  */
 public class RestApi {
@@ -67,7 +69,15 @@ public class RestApi {
     }
 
     public void start(int port) {
-        Javalin app = Javalin.create(config -> config.staticFiles.add("/public", Location.CLASSPATH));
+        SslPlugin https = new SslPlugin(ssl -> {
+            ssl.pemFromPath(Config.serverCertFile(), Config.serverKeyFile());
+            ssl.insecure = false; // niente HTTP in chiaro
+            ssl.securePort = port;
+        });
+        Javalin app = Javalin.create(config -> {
+            config.registerPlugin(https);
+            config.staticFiles.add("/public", Location.CLASSPATH);
+        });
         app.beforeMatched(this::checkAccess);
         app.exception(Database.DatabaseException.class, (e, ctx) -> {
             log.error("Errore del database", e);
@@ -93,7 +103,7 @@ public class RestApi {
 
         app.get("/api/alerts", ctx -> ctx.json(alerts.findLatest(20)), Role.TECH, Role.ADMIN);
 
-        app.start(port);
+        app.start();
     }
 
     /** Controlla che l'utente abbia fatto login e che il suo ruolo possa usare l'endpoint. */

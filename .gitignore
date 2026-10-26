@@ -4,3 +4,5 @@ buffer-*.jsonl
 .idea/
 *.iml
 .vscode/
+infra/certs/*.crt
+infra/certs/*.key

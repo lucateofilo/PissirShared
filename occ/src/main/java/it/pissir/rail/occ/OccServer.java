@@ -31,6 +31,6 @@ public class OccServer {
         mqtt.connect();
 
         new OverdueTrainMonitor(db, alerts).start();
-        new RestApi(db, traffic, faultManager).start(Config.httpPort());
+        new RestApi(db, traffic, faultManager).start(Config.httpsPort());
     }
 }

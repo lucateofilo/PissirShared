@@ -1,12 +1,14 @@
 # Avvio: docker compose -f infra/docker-compose.yml up -d
+# Prima bisogna creare i certificati con infra/certs/genera-certificati.sh
 # Per ricreare il database da zero: docker compose -f infra/docker-compose.yml down -v
 services:
   mosquitto:
     image: eclipse-mosquitto:2.0.20
     ports:
-      - "1883:1883"
+      - "8883:8883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto:/mosquitto/config:ro
+      - ./certs:/mosquitto/config/certs:ro
       - mosquitto-data:/mosquitto/data
 
   postgres:
