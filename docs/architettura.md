@@ -2,6 +2,29 @@
 
 Questo documento descrive come abbiamo organizzato il sistema di monitoraggio del traffico ferroviario: le tecnologie, i servizi, i topic MQTT, il database, le API REST e i flussi principali. Lo useremo come base per i capitoli 2, 3 e 4 della relazione.
 
+## Requisiti del progetto
+
+Funzioni ed eventi richiesti dal testo del progetto, con il servizio che se ne occupa.
+
+| Requisito | Servizio |
+|---|---|
+| Rilevare ingresso e uscita di un treno in stazione e il suo numero | SensorAgent, StationNode |
+| Un treno può partire da una stazione senza esserci entrato (origine) o entrarci senza uscirne (capolinea) | StationNode, TrainAgent |
+| Disconnessione temporanea dalla centrale: i dati non vanno persi e vengono reinviati | StationNode (buffer locale, QoS 1) |
+| Guasto permanente (binario rotto, treno deragliato): segnalato subito alla centrale | StationNode |
+| Durante il guasto ogni treno che entra viene avvisato e non riparte fino alla riparazione | StationNode, TrainAgent |
+| Il tecnico invia gli operatori a riparare una stazione guasta | SPA, OccServer |
+| Heartbeat tra sensori e stazione: se un sensore tace, la stazione si segnala guasta alla centrale | SensorAgent, StationNode |
+| Heartbeat tra stazione e centrale: se una stazione tace, la centrale la considera guasta | StationNode, OccServer |
+| Ogni treno è un processo separato che simula il viaggio e riceve avvisi di guasti e ritardi | TrainAgent |
+| La prossima stazione viene chiesta alla centrale, che la legge dal database | StationNode, OccServer |
+| Calcolo dei ritardi e previsione degli arrivi | OccServer |
+| Database con stato della linea, storico dei transiti, guasti e tratte di andata e ritorno di ogni treno | OccServer |
+| Allarme automatico se un treno resta fermo troppo tempo tra due stazioni | OccServer |
+| Tecnico: vede traffico e tratte, i treni attesi in una stazione, invia operatori | SPA, API REST |
+| Amministratore: vede traffico e tratte, aggiunge, modifica ed elimina tratte, sopprime treni fermi | SPA, API REST |
+| Comunicazione su TLS | Mosquitto, OccServer |
+
 ## 1. Tecnologie
 
 | Ambito | Scelta | Motivo |
@@ -72,7 +95,7 @@ Durante la demo saranno attivi questi processi:
 | `OccServer` | 1 | `occ` |
 | Mosquitto, Postgres | 1 ciascuno | Docker |
 
-Lo script `launch.sh` legge il file `scenario.json`, che contiene stazioni e treni, e avvia tutti i processi.
+Lo script `launch.sh` compila il progetto e avvia tutti i processi. L'elenco delle stazioni e dei treni da avviare è scritto all'inizio dello script.
 
 ## 3. Servizi
 
@@ -100,6 +123,7 @@ Gestisce una stazione. C'è un processo per ogni stazione.
 IN:
 - `rail/station/{S}/sensor/+/event`: rilevazioni dei sensori.
 - `rail/station/{S}/sensor/+/heartbeat`: heartbeat dei sensori.
+- `rail/station/{S}/ready`: un treno è pronto a partire da questa stazione, che è la sua stazione di origine.
 - `rail/station/{S}/reply/next-stop`: risposta della centrale con la prossima fermata.
 - `rail/station/{S}/cmd`: comandi della centrale (operatori inviati, soppressione di un treno).
 - `rail/station/{S}/sim`: comandi per simulare un guasto durante la demo.
@@ -144,6 +168,7 @@ IN:
 - `rail/train/{id}/alert` e `rail/alerts`: avvisi della centrale su guasti e ritardi.
 
 OUT:
+- `rail/station/{S}/ready`: all'avvio il treno avvisa la stazione di origine che è pronto a partire.
 - `rail/station/{S}/sensor/{IN|OUT}/detect`: il treno si presenta ai sensori.
 
 Il movimento segue un semplice motore a eventi discreti:
@@ -180,6 +205,7 @@ Tutti i topic iniziano con `rail/`. I messaggi sono in JSON e contengono sempre 
 | `station/{S}/sensor/{sid}/detect` | Treno | Sensore | 1 | no | `{"trainId":"101","ts":…}` |
 | `station/{S}/sensor/{sid}/event` | Sensore | Stazione | 1 | no | `{"eventId":…,"sensor":"IN","trainId":"101","ts":…}` |
 | `station/{S}/sensor/{sid}/heartbeat` | Sensore | Stazione | 0 | no | `{"ts":…}` |
+| `station/{S}/ready` | Treno | Stazione | 1 | no | `{"trainId":"101","dir":"A","ts":…}` |
 | `station/{S}/transit` | Stazione | OCC | 1 | no | `{"eventId":…,"trainId":"101","type":"ENTRY","dir":"A","ts":…}` |
 | `station/{S}/heartbeat` | Stazione | OCC | 0 | no | `{"ts":…,"sensors":{"IN":"OK","OUT":"OK"}}` |
 | `station/{S}/status` | Stazione | OCC | 1 | sì (Last Will `OFFLINE`) | `{"state":"ONLINE"}` |
@@ -376,10 +402,10 @@ sequenceDiagram
 ```
 PissirShared/
 ├── pom.xml                 (parent)
-├── common/                 messaggi (record Java), costanti dei topic, MqttHelper con TLS
+├── common/                 messaggi (record Java), nomi dei topic, client MQTT
 ├── sensor/                 SensorAgent
-├── station/                StationNode, LocalBuffer, SensorWatchdog
-├── train/                  TrainAgent, DiscreteEventEngine
+├── station/                StationNode
+├── train/                  TrainAgent
 ├── occ/                    OccServer, ingestion/, traffic/, fault/, alerting/, api/, db/
 │   └── src/main/resources/public/   SPA (index.html, app.js, style.css)
 ├── infra/
@@ -387,8 +413,8 @@ PissirShared/
 │   ├── mosquitto/          mosquitto.conf, acl, passwd
 │   ├── certs/              script per generare CA e certificati
 │   └── db/schema.sql, seed.sql
-├── scenario.json           stazioni, treni e tratte per la demo
-├── launch.sh
+├── launch.sh               avvia tutti i processi della demo
+├── stop.sh
 └── docs/
 ```
 

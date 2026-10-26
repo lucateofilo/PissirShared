@@ -1,0 +1,27 @@
+# Avvio: docker compose -f infra/docker-compose.yml up -d
+# Per ricreare il database da zero: docker compose -f infra/docker-compose.yml down -v
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rail
+      POSTGRES_USER: rail
+      POSTGRES_PASSWORD: rail
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  mosquitto-data:
+  postgres-data:
