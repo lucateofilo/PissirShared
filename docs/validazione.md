@@ -4,7 +4,7 @@ Abbiamo verificato il sistema in due modi: con test automatici sulle parti che n
 
 ## Test automatici
 
-Si lanciano con `mvn test`.
+Si lanciano con `./mvnw test`.
 
 | Test | Cosa verifica |
 |---|---|

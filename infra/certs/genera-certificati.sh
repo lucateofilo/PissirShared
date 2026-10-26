@@ -3,6 +3,8 @@
 # I file generati restano in questa cartella e non vanno caricati su git.
 set -e
 cd "$(dirname "$0")"
+# Su Windows, Git Bash trasformerebbe "/CN=..." in un percorso di Windows
+export MSYS_NO_PATHCONV=1
 
 # Autorità di certificazione (CA) del progetto
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \

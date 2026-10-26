@@ -7,6 +7,8 @@
 #   ./sim.sh blocca <treno>                    il treno si ferma tra due stazioni
 #   ./sim.sh sblocca <treno>                   il treno riparte
 cd "$(dirname "$0")"
+# Su Windows, Git Bash trasformerebbe i percorsi del container in percorsi di Windows
+export MSYS_NO_PATHCONV=1
 
 publish() {
     docker compose -f infra/docker-compose.yml exec -T mosquitto \

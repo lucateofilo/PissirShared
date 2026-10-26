@@ -9,7 +9,7 @@ STATIONS="A B C"
 # numero del treno : stazione di partenza : direzione (A = andata, R = ritorno)
 TRAINS="101:A:A 102:C:R"
 
-mvn -q package
+./mvnw -q package
 mkdir -p logs
 rm -f logs/pids
 

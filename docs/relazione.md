@@ -443,7 +443,7 @@ Le tabelle vengono rilette ogni 2 secondi. Il tecnico ha il bottone "Invia opera
 
 Abbiamo verificato il sistema con test automatici e con scenari di prova sul sistema completo. Il dettaglio, con i comandi per ripetere ogni prova e i risultati osservati, è in [validazione.md](validazione.md).
 
-I test automatici (`mvn test`) controllano il calcolo degli orari previsti, la conversione dei messaggi in JSON e la corrispondenza tra topic e filtri delle sottoscrizioni.
+I test automatici (`./mvnw test`) controllano il calcolo degli orari previsti, la conversione dei messaggi in JSON e la corrispondenza tra topic e filtri delle sottoscrizioni.
 
 Gli scenari sul sistema completo sono:
 
