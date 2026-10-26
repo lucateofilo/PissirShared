@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Centrale Operativa</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Centrale Operativa</h1>
+
+<h2>Stazioni</h2>
+<table>
+    <thead><tr><th>Id</th><th>Nome</th><th>Stato</th><th>Ultimo heartbeat</th></tr></thead>
+    <tbody id="stations"></tbody>
+</table>
+
+<h2>Treni</h2>
+<table>
+    <thead><tr><th>Treno</th><th>Stato</th><th>Direzione</th><th>Ultima stazione</th><th>Prossima</th></tr></thead>
+    <tbody id="trains"></tbody>
+</table>
+
+<script src="app.js"></script>
+</body>
+</html>
