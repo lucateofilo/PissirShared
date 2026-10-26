@@ -56,6 +56,9 @@ public class Mqtt implements MqttCallbackExtended {
         options.setCleanSession(false);
         options.setConnectionTimeout(5);
         options.setKeepAliveInterval(10);
+        options.setUserName(Config.mqttUser());
+        options.setPassword(Config.mqttPassword().toCharArray());
+        options.setSocketFactory(Tls.socketFactory(Config.caFile()));
     }
 
     /** Messaggio che il broker pubblica al posto nostro se cadiamo. Va chiamato prima di connect(). */

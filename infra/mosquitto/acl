@@ -1,0 +1,42 @@
+# Permessi sui topic per ogni tipo di client.
+# read = può ricevere i messaggi del topic, write = può pubblicarci.
+
+# Centrale operativa
+user occ
+topic readwrite rail/#
+
+# Nodi stazione
+user station
+topic read rail/station/+/sensor/+/event
+topic read rail/station/+/sensor/+/heartbeat
+topic read rail/station/+/ready
+topic read rail/station/+/reply/next-stop
+topic read rail/station/+/cmd
+topic read rail/station/+/sim
+topic write rail/station/+/transit
+topic write rail/station/+/heartbeat
+topic write rail/station/+/status
+topic write rail/station/+/fault
+topic write rail/occ/request/next-stop
+topic write rail/train/+/cmd
+
+# Sensori
+user sensor
+topic read rail/station/+/sensor/+/detect
+topic read rail/station/+/sensor/+/sim
+topic write rail/station/+/sensor/+/event
+topic write rail/station/+/sensor/+/heartbeat
+
+# Treni
+user train
+topic read rail/train/+/cmd
+topic read rail/train/+/alert
+topic read rail/train/+/sim
+topic write rail/station/+/sensor/+/detect
+topic write rail/station/+/ready
+
+# Script di simulazione dei guasti (sim.sh)
+user sim
+topic write rail/station/+/sim
+topic write rail/station/+/sensor/+/sim
+topic write rail/train/+/sim
