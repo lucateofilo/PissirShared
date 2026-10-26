@@ -4,6 +4,13 @@ function formatTime(value) {
     return value ? new Date(value).toLocaleTimeString('it-IT') : '-';
 }
 
+// Ritardo in secondi: positivo se il treno è in ritardo, negativo se è in anticipo
+function formatDelay(seconds) {
+    if (seconds > 0) return '+' + seconds + ' s';
+    if (seconds < 0) return seconds + ' s';
+    return 'in orario';
+}
+
 function cell(text) {
     const td = document.createElement('td');
     td.textContent = text ?? '-';
@@ -39,7 +46,9 @@ async function refresh() {
             t => t.state,
             t => t.direction === 'R' ? 'Ritorno' : 'Andata',
             t => t.last_station,
-            t => t.next_station
+            t => t.next_station,
+            t => formatTime(t.expected_arrival),
+            t => formatDelay(t.delay_sec)
         ]);
     } catch (e) {
         console.error('Aggiornamento fallito', e);

@@ -14,16 +14,16 @@ CREATE TABLE train (
     direction    CHAR(1) CHECK (direction IN ('A', 'R')),
     last_station VARCHAR(10) REFERENCES station (id),
     next_station VARCHAR(10) REFERENCES station (id),
-    departed_at  TIMESTAMPTZ,
-    delay_sec    INTEGER NOT NULL DEFAULT 0
+    journey_start    TIMESTAMPTZ,              -- partenza dalla stazione di origine del viaggio in corso
+    expected_arrival TIMESTAMPTZ,              -- arrivo stimato alla prossima stazione
+    delay_sec        INTEGER NOT NULL DEFAULT 0
 );
 
 -- Una tratta è il viaggio di un treno in una direzione (A = andata, R = ritorno)
 CREATE TABLE route (
-    id                  SERIAL PRIMARY KEY,
-    train_id            VARCHAR(10) NOT NULL REFERENCES train (id) ON DELETE CASCADE,
-    direction           CHAR(1)     NOT NULL CHECK (direction IN ('A', 'R')),
-    scheduled_departure TIME        NOT NULL,
+    id        SERIAL PRIMARY KEY,
+    train_id  VARCHAR(10) NOT NULL REFERENCES train (id) ON DELETE CASCADE,
+    direction CHAR(1)     NOT NULL CHECK (direction IN ('A', 'R')),
     UNIQUE (train_id, direction)
 );
 

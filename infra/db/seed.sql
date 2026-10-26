@@ -8,12 +8,12 @@ INSERT INTO station (id, name) VALUES
 
 INSERT INTO train (id) VALUES ('101'), ('102');
 
--- Treno 101: andata A -> B -> C, ritorno C -> B -> A
-INSERT INTO route (id, train_id, direction, scheduled_departure) VALUES
-    (1, '101', 'A', '08:00'),
-    (2, '101', 'R', '09:00'),
-    (3, '102', 'A', '08:30'),
-    (4, '102', 'R', '09:30');
+-- Andata A -> B -> C, ritorno C -> B -> A
+INSERT INTO route (id, train_id, direction) VALUES
+    (1, '101', 'A'),
+    (2, '101', 'R'),
+    (3, '102', 'A'),
+    (4, '102', 'R');
 
 INSERT INTO route_stop (route_id, seq, station_id, travel_time_sec, dwell_sec) VALUES
     (1, 1, 'A', 0, 0),  (1, 2, 'B', 20, 5), (1, 3, 'C', 25, 0),

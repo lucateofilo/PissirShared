@@ -253,12 +253,12 @@ erDiagram
           char direction
           varchar last_station FK
           varchar next_station FK
-          timestamp departed_at
+          timestamp journey_start
+          timestamp expected_arrival
           int delay_sec }
   ROUTE { serial id PK
           varchar train_id FK
-          char direction
-          time scheduled_departure }
+          char direction }
   ROUTE_STOP { int route_id FK
                int seq
                varchar station_id FK
@@ -291,10 +291,14 @@ erDiagram
              varchar role }
 ```
 
-Ogni tratta (`ROUTE`) ha un orario di partenza e un elenco ordinato di fermate (`ROUTE_STOP`) con il tempo di percorrenza dalla fermata precedente e il tempo di sosta. Da questi dati calcoliamo:
-- l'orario previsto a una fermata, cioè l'orario di partenza più la somma dei tempi di percorrenza e di sosta delle fermate precedenti;
-- il ritardo, cioè la differenza tra l'orario reale del transito e quello previsto;
-- l'arrivo stimato alla prossima stazione, cioè l'ora di partenza più il tempo di percorrenza più il ritardo attuale.
+Ogni tratta (`ROUTE`) ha un elenco ordinato di fermate (`ROUTE_STOP`) con il tempo di percorrenza dalla fermata precedente e il tempo di sosta.
+
+Nella simulazione i treni partono quando li avviamo, non a un orario fisso. Per questo l'orario previsto di ogni fermata si calcola a partire dalla partenza effettiva dalla stazione di origine, salvata in `journey_start`. Da questi dati calcoliamo:
+- l'orario previsto di arrivo a una fermata: `journey_start` più la somma dei tempi di percorrenza e delle soste delle fermate precedenti; per la partenza si aggiunge anche la sosta nella fermata stessa;
+- il ritardo: la differenza tra l'orario reale del transito e quello previsto, negativa se il treno è in anticipo; viene salvato sia nel transito sia nel treno;
+- l'arrivo previsto alla prossima stazione (`expected_arrival`): l'ora reale di partenza più il tempo di percorrenza. Un treno partito in ritardo ha quindi anche un arrivo previsto più tardi.
+
+Esempio con la tratta A, B, C (20 s da A a B, sosta di 5 s in B, 25 s da B a C): se il treno lascia A alle 10:00:00, l'arrivo previsto in B è alle 10:00:20, la partenza da B alle 10:00:25 e l'arrivo in C alle 10:00:50. Il calcolo è nella classe `Schedule`, verificata dal test `ScheduleTest`.
 
 ## 7. API REST
 
