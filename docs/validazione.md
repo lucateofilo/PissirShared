@@ -15,9 +15,7 @@ Si lanciano con `./mvnw test`.
 ## Preparazione degli scenari
 
 ```bash
-infra/certs/genera-certificati.sh               # solo la prima volta
-docker compose -f infra/docker-compose.yml up -d
-./launch.sh
+docker compose up --build -d
 ```
 
 Si apre https://localhost:8443 (il browser segnala il certificato firmato dalla nostra CA: va accettato oppure va importato `infra/certs/ca.crt`). Si entra come `tecnico` / `tecnico` oppure `admin` / `admin`.
@@ -25,8 +23,8 @@ Si apre https://localhost:8443 (il browser segnala il certificato firmato dalla 
 Per seguire i messaggi sul broker:
 
 ```bash
-docker compose -f infra/docker-compose.yml exec mosquitto \
-    mosquitto_sub -h localhost -p 8883 --cafile /mosquitto/config/certs/ca.crt -u occ -P occ2026 -t 'rail/#' -v
+docker compose exec mosquitto \
+    mosquitto_sub -h localhost -p 8883 --cafile /mosquitto/certs/ca.crt -u occ -P occ2026 -t 'rail/#' -v
 ```
 
 Con i dati di prova il treno 101 va da A a C e il treno 102 da C ad A. I tempi sono brevi: da A a B 20 secondi, sosta in B 5 secondi, da B a C 25 secondi. Il viaggio completo dura circa un minuto.
@@ -55,7 +53,7 @@ Risultato: confermato. Esempio di transiti registrati nel database:
 
 ### 2. Guasto permanente e riparazione
 
-Passi: subito dopo l'avvio `./sim.sh guasto B`. Quando i treni sono fermi in B, il tecnico preme "Invia operatori".
+Passi: subito dopo la partenza dei treni `docker compose exec mosquitto sim guasto B`. Quando i treni sono fermi in B, il tecnico preme "Invia operatori".
 
 Atteso: compaiono l'allarme e il guasto "Da riparare"; la stazione B risulta "Guasta". I treni diretti in B ricevono un avviso e, arrivati in B, restano fermi. Dopo l'invio degli operatori la stazione passa "In riparazione" e dopo 20 secondi torna attiva; i treni ripartono.
 
@@ -73,7 +71,7 @@ Abbiamo verificato anche che l'amministratore non può inviare gli operatori (ri
 
 ### 3. Sensore guasto
 
-Passi: `./sim.sh sensore-rotto C IN`, dopo un minuto `./sim.sh sensore-ok C IN`.
+Passi: `docker compose exec mosquitto sim sensore-rotto C IN`, dopo un minuto `docker compose exec mosquitto sim sensore-ok C IN`.
 
 Atteso: entro 6 secondi la stazione C passa a "Sensori guasti" con il dettaglio "Sensori non raggiungibili: IN" e compare un allarme. Il treno 101 arriva in C ma il sensore non lo rileva, quindi la centrale non riceve l'ingresso e dopo 15 secondi oltre l'arrivo previsto segnala il treno come fermo tra B e C. Riattivato il sensore, la stazione torna attiva.
 
@@ -86,7 +84,7 @@ Treno 101 fermo tra le stazioni B e C
 
 ### 4. Treno fermo tra due stazioni
 
-Passi: mentre il treno 102 viaggia da B ad A, `./sim.sh blocca 102`; dopo l'allarme, `./sim.sh sblocca 102`.
+Passi: mentre il treno 102 viaggia da B ad A, `docker compose exec mosquitto sim blocca 102`; dopo l'allarme, `docker compose exec mosquitto sim sblocca 102`.
 
 Atteso: 15 secondi dopo l'arrivo previsto compare l'allarme "Treno 102 fermo tra le stazioni B e A". Sbloccato, il treno arriva ad A e riceve l'avviso del ritardo.
 
@@ -94,15 +92,15 @@ Risultato: confermato. Il treno è arrivato con 39 secondi di ritardo e ha ricev
 
 ### 5. Stazione che cade
 
-Passi: terminare il processo di una stazione (`kill -9 <pid>`, il pid è in `logs/pids`), poi riavviarla.
+Passi: terminare una stazione con `docker compose kill station-b` e riavviarla con `docker compose start station-b`.
 
-Atteso: il broker pubblica il Last Will della stazione e la centrale genera l'allarme "Stazione B non raggiungibile (Connessione persa)". Riavviata la stazione, torna attiva. Se il processo resta bloccato senza chiudere la connessione (`kill -STOP <pid>`), la centrale se ne accorge comunque dopo 15 secondi senza heartbeat.
+Atteso: il broker pubblica il Last Will della stazione e la centrale genera l'allarme "Stazione B non raggiungibile (Connessione persa)". Riavviata la stazione, torna attiva. Se il processo resta bloccato senza chiudere la connessione (`docker compose pause station-c`, oppure `kill -STOP` sul processo), la centrale se ne accorge comunque, al più tardi dopo 15 secondi senza heartbeat.
 
 Risultato: confermato in entrambi i casi. Con `kill -STOP` la centrale ha generato "Stazione C non raggiungibile (nessun heartbeat da 15 s)". Ripreso il processo con `kill -CONT`, la stazione è passata per qualche secondo a "Sensori guasti", perché mentre era bloccata non riceveva gli heartbeat dei sensori, ed è poi tornata attiva.
 
 ### 6. Centrale spenta durante il viaggio
 
-Passi: terminare la centrale (`kill <pid>`) mentre i treni viaggiano, aspettare 20 secondi, riavviarla con `MQTT_USER=occ MQTT_PASSWORD=occ2026 java -jar occ/target/occ.jar`.
+Passi: mentre i treni viaggiano, `docker compose stop occ`; dopo 20 secondi `docker compose start occ`.
 
 Atteso: i messaggi inviati mentre la centrale era spenta restano nel broker, grazie a QoS 1 e alla sessione persistente, e arrivano alla riaccensione. Nessun transito va perso.
 

@@ -1,0 +1,5 @@
+.git
+**/target
+logs
+infra/certs/*.crt
+infra/certs/*.key

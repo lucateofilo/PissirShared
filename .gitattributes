@@ -1,0 +1,4 @@
+# Gli script devono avere fine riga Unix anche se il repository viene scaricato su Windows
+*.sh text eol=lf
+mvnw text eol=lf
+infra/mosquitto/* text eol=lf
