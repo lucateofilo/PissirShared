@@ -1,5 +1,5 @@
 package it.pissir.rail.common.msg;
 
-/** Heartbeat della stazione verso la centrale. Topic: station/{S}/heartbeat */
+/** Heartbeat di un sensore verso la sua stazione. Topic: station/{S}/sensor/{sid}/heartbeat */
 public record Heartbeat(String ts) {
 }

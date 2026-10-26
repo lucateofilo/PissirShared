@@ -2,6 +2,8 @@ package it.pissir.rail.occ;
 
 import it.pissir.rail.common.Config;
 import it.pissir.rail.common.Mqtt;
+import it.pissir.rail.occ.alerting.AlertService;
+import it.pissir.rail.occ.alerting.OverdueTrainMonitor;
 import it.pissir.rail.occ.api.RestApi;
 import it.pissir.rail.occ.db.Database;
 import it.pissir.rail.occ.fault.FaultManager;
@@ -18,11 +20,17 @@ public class OccServer {
     public static void main(String[] args) {
         Database db = new Database();
         Mqtt mqtt = new Mqtt("occ");
+
+        AlertService alerts = new AlertService(mqtt, db);
+        TrafficLogic traffic = new TrafficLogic(mqtt, db);
+        FaultManager faultManager = new FaultManager(mqtt, db, alerts);
+
+        new Ingestion(mqtt, db, alerts).start();
+        traffic.start();
+        faultManager.start();
         mqtt.connect();
 
-        new Ingestion(mqtt, db).start();
-        new TrafficLogic(mqtt, db).start();
-        new FaultManager(mqtt, db).start();
-        new RestApi(db).start(Config.httpPort());
+        new OverdueTrainMonitor(db, alerts).start();
+        new RestApi(db, traffic, faultManager).start(Config.httpPort());
     }
 }
