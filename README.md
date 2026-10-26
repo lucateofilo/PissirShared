@@ -31,8 +31,8 @@ Su Windows i comandi successivi, compresi gli script del progetto, si lanciano d
 macOS (con [Homebrew](https://brew.sh); poi aprire Docker dalle Applicazioni):
 
 ```bash
-brew install openjdk@21 git
-brew install --cask docker
+brew install git
+brew install --cask temurin@21 docker
 ```
 
 Ubuntu / Debian:
