@@ -1,27 +1,23 @@
-# Architettura – Sistema di Monitoraggio del Traffico Ferroviario
+# Architettura del sistema
 
-Documento di progetto. Copre le scelte tecnologiche, i servizi, i topic MQTT, il database, le API REST e i flussi principali. È pensato per servire da base ai capitoli 2–4 della relazione.
+Questo documento descrive come abbiamo organizzato il sistema di monitoraggio del traffico ferroviario: le tecnologie, i servizi, i topic MQTT, il database, le API REST e i flussi principali. Lo useremo come base per i capitoli 2, 3 e 4 della relazione.
 
----
+## 1. Tecnologie
 
-## 1. Scelte tecnologiche
-
-| Ambito | Scelta | Perché |
+| Ambito | Scelta | Motivo |
 |---|---|---|
-| Linguaggio | **Java 21** | Il testo cita JDBC; è il linguaggio di riferimento del corso. Un solo linguaggio per tutti i servizi. |
-| Build | **Maven** multi-modulo | Un modulo per servizio più un modulo `common` condiviso. |
-| Client MQTT | **Eclipse Paho** (`org.eclipse.paho.client.mqttv3`) | Standard de facto in Java, supporta TLS, QoS, sessioni persistenti e Last Will. |
-| Broker | **Mosquitto** | Leggero, configurazione TLS e ACL semplice. |
-| REST + web server | **Javalin** | Micro-framework minimale. In alternativa **Spark Java**, se è quello visto a lezione. |
-| JSON | **Jackson** | Serializzazione dei messaggi MQTT e delle risposte REST. |
-| Database | **PostgreSQL** via JDBC | Variante 3: va bene anche SQLite o file JSON, senza penalità. |
-| Password | **BCrypt** (jBCrypt) | Variante 2: login e password salvati sul server, senza penalità. |
-| Interfaccia web | **SPA** in HTML + JavaScript (fetch e Server-Sent Events) | Variante 1: nessuna penalità. Senza framework, così ogni riga è facile da spiegare all'esame. |
-| Deploy | **Docker Compose** per Mosquitto e Postgres; i servizi Java girano come processi separati | Si avvia con un solo comando al momento della demo. |
+| Linguaggio | Java 21 | Il testo del progetto parla di JDBC e usiamo lo stesso linguaggio per tutti i servizi. |
+| Build | Maven, progetto multi-modulo | Un modulo per ogni servizio e un modulo `common` con il codice condiviso. |
+| Client MQTT | Eclipse Paho (`org.eclipse.paho.client.mqttv3`) | Supporta TLS, QoS, sessioni persistenti e Last Will. |
+| Broker | Mosquitto | È leggero e si configura facilmente con TLS e ACL. |
+| Server REST | Javalin | Framework piccolo, poche righe per definire un endpoint. In alternativa si può usare Spark Java. |
+| JSON | Jackson | Serve sia per i messaggi MQTT sia per le risposte REST. |
+| Database | PostgreSQL con JDBC | |
+| Password | BCrypt (libreria jBCrypt) | Salviamo sul server solo l'hash della password. |
+| Interfaccia web | SPA in HTML e JavaScript, senza framework | La pagina chiama le API con `fetch` e riceve gli aggiornamenti con Server-Sent Events. |
+| Avvio | Docker Compose per Mosquitto e Postgres | I servizi Java girano come processi separati. |
 
-**Varianti scelte:** 1 (SPA), 2 (login/password) e 3 (JDBC). Nessuna è penalizzata. Il TLS va implementato, sia su MQTT sia su HTTPS. Ogni stazione è un processo separato.
-
----
+Rispetto alle varianti ammesse scegliamo la 1 (SPA), la 2 (login e password salvati sul server) e la 3 (database con JDBC). Nessuna delle tre comporta penalità. Implementiamo TLS sia su MQTT sia su HTTP, e ogni stazione è un processo separato.
 
 ## 2. Vista d'insieme
 
@@ -64,61 +60,67 @@ flowchart LR
   WEB -- HTTPS :8443 --> API
 ```
 
-Nessun componente comunica direttamente con un altro: passa tutto dal broker tramite topic. L'unico canale fuori da MQTT è quello tra browser e OCC, in HTTPS.
+Sensori, stazioni, treni e centrale non si parlano direttamente: ognuno pubblica e riceve messaggi sul broker. L'unica comunicazione fuori da MQTT è quella tra il browser e la centrale, in HTTPS.
 
-### Processi in esecuzione durante la demo
+Durante la demo saranno attivi questi processi:
 
-| Processo | Quante istanze | Modulo Maven |
+| Processo | Istanze | Modulo Maven |
 |---|---|---|
-| `SensorAgent` | 2 per stazione (IN e OUT) | `sensor` |
+| `SensorAgent` | 2 per stazione (ingresso e uscita) | `sensor` |
 | `StationNode` | 1 per stazione | `station` |
 | `TrainAgent` | 1 per treno | `train` |
 | `OccServer` | 1 | `occ` |
-| Mosquitto, Postgres | 1 ciascuno | docker |
+| Mosquitto, Postgres | 1 ciascuno | Docker |
 
-Uno script `launch.sh` avvia tutto partendo da un file `scenario.json` che elenca stazioni e treni.
+Lo script `launch.sh` legge il file `scenario.json`, che contiene stazioni e treni, e avvia tutti i processi.
 
----
+## 3. Servizi
 
-## 3. I servizi
-
-Per ogni servizio sono indicate le porte in ingresso (IN) e in uscita (OUT), cioè le facce dell'esagono, e i thread attivi.
+Per ogni servizio indichiamo cosa riceve (IN), cosa produce (OUT) e quali thread usa. Nella relazione queste informazioni diventeranno le interfacce degli esagoni.
 
 ### 3.1 SensorAgent
 
-Simula un sensore fisico, per esempio una fotocellula o un lettore RFID. Ce n'è uno per l'ingresso e uno per l'uscita di ogni stazione.
+Simula un sensore fisico, ad esempio una fotocellula o un lettore RFID. Ogni stazione ha un sensore in ingresso e uno in uscita.
 
-- **IN:** `rail/station/{S}/sensor/{sensorId}/detect` è il "passaggio" simulato del treno.
-- **OUT:** `rail/station/{S}/sensor/{sensorId}/event` è la rilevazione validata. `rail/station/{S}/sensor/{sensorId}/heartbeat` parte ogni 2 secondi.
-- **Logica:** valida il messaggio (il treno esiste ed è nel formato giusto), aggiunge timestamp e un `eventId` (UUID) e lo inoltra alla stazione.
-- **Simulazione guasto:** il comando `kill` sul topic `.../sim` ferma heartbeat e rilevazioni.
-- **Thread:** callback di Paho e un `ScheduledExecutor` per l'heartbeat.
+IN:
+- `rail/station/{S}/sensor/{sensorId}/detect`: il treno che passa davanti al sensore.
+
+OUT:
+- `rail/station/{S}/sensor/{sensorId}/event`: la rilevazione inoltrata alla stazione.
+- `rail/station/{S}/sensor/{sensorId}/heartbeat`: un messaggio ogni 2 secondi.
+
+Quando riceve un `detect`, il sensore controlla che il messaggio sia valido, aggiunge l'ora e un identificativo univoco (`eventId`, un UUID) e lo inoltra alla stazione. Per simulare un guasto basta mandargli il comando `kill` sul topic `.../sim`: da quel momento smette di inviare heartbeat e rilevazioni.
+
+Thread: la callback di Paho e uno `ScheduledExecutor` per l'heartbeat.
 
 ### 3.2 StationNode
 
-È il cuore dell'edge, uno per stazione.
+Gestisce una stazione. C'è un processo per ogni stazione.
 
-- **IN:**
-  - `rail/station/{S}/sensor/+/event` – rilevazioni dei sensori
-  - `rail/station/{S}/sensor/+/heartbeat` – battito dei sensori
-  - `rail/station/{S}/reply/next-stop` – risposta della centrale sulla prossima fermata
-  - `rail/station/{S}/cmd` – comandi dalla centrale (operatori inviati, guasto riparato, sopprimi treno)
-  - `rail/station/{S}/sim` – iniezione di guasti per la demo
-- **OUT:**
-  - `rail/station/{S}/transit` – ingresso o uscita di un treno (QoS 1)
-  - `rail/station/{S}/heartbeat` – ogni 5 secondi (QoS 0)
-  - `rail/station/{S}/status` – `ONLINE`, `DEGRADED`, `FAULT` oppure `OFFLINE` (retained; `OFFLINE` è impostato come Last Will)
-  - `rail/station/{S}/fault` – apertura o chiusura di un guasto (QoS 1)
-  - `rail/occ/request/next-stop` – richiesta della prossima fermata
-  - `rail/train/{id}/cmd` – ordini al treno (`DEPART`, `HOLD`, `SUPPRESS`)
-- **Componenti interni:**
-  - *Logic Controller:* tiene la mappa dei treni presenti e la macchina a stati della stazione.
-  - *Local Buffer:* coda su file (`buffer-{S}.jsonl`) dei transiti non ancora confermati dal broker. Si svuota alla riconnessione.
-  - *Heartbeat Generator* verso la centrale.
-  - *Sensor Watchdog:* se un sensore tace per più di 3 heartbeat (6 secondi), la stazione passa a `DEGRADED`/`FAULT` e lo segnala alla centrale.
-- **Thread:** callback di Paho, scheduler (heartbeat e watchdog), thread che svuota il buffer.
+IN:
+- `rail/station/{S}/sensor/+/event`: rilevazioni dei sensori.
+- `rail/station/{S}/sensor/+/heartbeat`: heartbeat dei sensori.
+- `rail/station/{S}/reply/next-stop`: risposta della centrale con la prossima fermata.
+- `rail/station/{S}/cmd`: comandi della centrale (operatori inviati, soppressione di un treno).
+- `rail/station/{S}/sim`: comandi per simulare un guasto durante la demo.
 
-**Macchina a stati della stazione:**
+OUT:
+- `rail/station/{S}/transit`: ingresso o uscita di un treno (QoS 1).
+- `rail/station/{S}/heartbeat`: un messaggio ogni 5 secondi (QoS 0).
+- `rail/station/{S}/status`: stato della stazione, cioè `ONLINE`, `DEGRADED`, `FAULT` o `OFFLINE`. Il messaggio è retained e `OFFLINE` è impostato come Last Will.
+- `rail/station/{S}/fault`: apertura e chiusura di un guasto (QoS 1).
+- `rail/occ/request/next-stop`: richiesta della prossima fermata di un treno.
+- `rail/train/{id}/cmd`: ordini al treno (`DEPART`, `HOLD`, `SUPPRESS`).
+
+Dentro la stazione ci sono quattro parti:
+- il controller, che tiene l'elenco dei treni presenti e lo stato della stazione;
+- il buffer locale, un file `buffer-{S}.jsonl` dove scriviamo i transiti finché il broker non ne conferma la ricezione; quando la connessione torna, i transiti rimasti vengono reinviati;
+- il generatore di heartbeat verso la centrale;
+- il watchdog dei sensori: se un sensore non manda heartbeat per 6 secondi (tre intervalli), la stazione passa in `DEGRADED` e lo comunica alla centrale.
+
+Thread: la callback di Paho, uno scheduler per heartbeat e watchdog, un thread che svuota il buffer dopo una riconnessione.
+
+Stati della stazione:
 
 ```mermaid
 stateDiagram-v2
@@ -131,77 +133,79 @@ stateDiagram-v2
   REPAIRING --> ONLINE: riparazione completata
 ```
 
-Finché la stazione è in `FAULT` o `REPAIRING`, ogni treno che entra riceve `HOLD` e non riparte. Alla riparazione la stazione manda `DEPART` a tutti i treni trattenuti.
+Negli stati `FAULT` e `REPAIRING` la stazione risponde `HOLD` a ogni treno che entra, e il treno resta fermo. Quando la riparazione finisce, la stazione manda `DEPART` ai treni trattenuti.
 
-### 3.3 TrainAgent (digital twin)
+### 3.3 TrainAgent
 
-Uno per treno. Lo stato interno contiene `trainId`, la direzione (A per andata, R per ritorno), la stazione precedente, la prossima stazione e uno stato tra `RUNNING`, `IN_STATION`, `HELD`, `SUPPRESSED` e `ARRIVED`.
+Ogni treno è un processo che simula il proprio viaggio. Il suo stato contiene il numero del convoglio, la direzione (A per andata, R per ritorno), la stazione precedente, la prossima stazione e una fase tra `RUNNING`, `IN_STATION`, `HELD`, `SUPPRESSED` e `ARRIVED`.
 
-- **IN:** `rail/train/{id}/cmd` (ordini della stazione) e `rail/train/{id}/alert` più `rail/alerts` (avvisi della centrale).
-- **OUT:** `rail/station/{S}/sensor/{IN|OUT}/detect` (si presenta ai sensori) e `rail/train/{id}/telemetry` (posizione stimata ogni 5 secondi, opzionale).
-- **Motore a eventi discreti:**
-  1. Riceve `DEPART {next, travelTime}`.
-  2. Pubblica `detect` sul sensore OUT della stazione attuale.
-  3. Programma l'arrivo dopo `travelTime × fattore casuale` (per esempio 0.9–1.3, che simula rallentamenti).
-  4. Allo scadere pubblica `detect` sul sensore IN della stazione `next` e attende nuovi ordini.
-- **Simulazione:** il comando `sim stop` blocca il treno tra due stazioni, per far scattare l'allarme in centrale.
-- **Thread:** callback di Paho e uno `ScheduledExecutor` per il motore.
+IN:
+- `rail/train/{id}/cmd`: ordini della stazione.
+- `rail/train/{id}/alert` e `rail/alerts`: avvisi della centrale su guasti e ritardi.
 
-### 3.4 OccServer (Centrale Operativa)
+OUT:
+- `rail/station/{S}/sensor/{IN|OUT}/detect`: il treno si presenta ai sensori.
 
-È un processo unico (monolite modulare), diviso in package con responsabilità separate. Il testo consente il monolite. In relazione ogni package si disegna come un esagono a sé.
+Il movimento segue un semplice motore a eventi discreti:
+1. il treno riceve `DEPART` con la prossima stazione e il tempo di percorrenza;
+2. pubblica `detect` sul sensore di uscita della stazione in cui si trova;
+3. programma l'arrivo dopo il tempo di percorrenza moltiplicato per un fattore casuale tra 0,9 e 1,3, per simulare rallentamenti;
+4. all'arrivo pubblica `detect` sul sensore di ingresso della nuova stazione e aspetta il prossimo ordine.
+
+Per provare l'allarme "treno fermo tra due stazioni" il treno accetta il comando `sim stop`, che lo blocca a metà percorso.
+
+Thread: la callback di Paho e uno `ScheduledExecutor` per il motore.
+
+### 3.4 OccServer
+
+La centrale è un unico processo, diviso in package. Il testo permette un server monolitico; nella relazione disegneremo comunque un esagono per ogni modulo.
 
 | Modulo | IN | OUT | Compito |
 |---|---|---|---|
-| **Ingestion** | `rail/station/+/transit`, `rail/train/+/telemetry` | DB, EventBus interno | Valida il JSON, scarta i duplicati (`eventId` UNIQUE), aggiorna lo stato del treno, calcola il ritardo. |
-| **Traffic Logic** | `rail/occ/request/next-stop` | `rail/station/{S}/reply/next-stop` | Legge la tratta dal DB e risponde con la prossima stazione e il tempo di percorrenza (o `END` al capolinea). |
-| **Fault Manager** | `rail/station/+/heartbeat`, `+/status`, `+/fault` | `rail/station/{S}/cmd`, DB, EventBus | Watchdog sulle stazioni (timeout di 15 secondi oppure Last Will `OFFLINE`), apre e chiude gli incidenti, invia `DISPATCH`. |
-| **Alerting** | EventBus, timer | `rail/alerts`, `rail/train/{id}/alert`, DB | Allarme "treno fermo tra stazioni", stazione morta, ritardo oltre soglia. Avvisa i treni diretti verso una stazione guasta. |
-| **REST API** | HTTPS `/api/*` | DB, comandi al Fault Manager | Endpoint per la SPA e flusso SSE `/api/stream` per gli aggiornamenti in tempo reale. |
-| **Persistence** | – | JDBC | DAO, uno per tabella. |
+| Ingestion | `rail/station/+/transit` | DB, eventi interni | Controlla il messaggio, scarta i duplicati, aggiorna la posizione del treno e calcola il ritardo. |
+| Traffic Logic | `rail/occ/request/next-stop` | `rail/station/{S}/reply/next-stop` | Legge la tratta dal database e risponde con la prossima stazione e il tempo di percorrenza, oppure con `null` se il treno è al capolinea. |
+| Fault Manager | `rail/station/+/heartbeat`, `+/status`, `+/fault` | `rail/station/{S}/cmd`, DB | Controlla gli heartbeat delle stazioni, apre e chiude i guasti, invia `DISPATCH` quando il tecnico manda gli operatori. |
+| Alerting | eventi interni, timer | `rail/alerts`, `rail/train/{id}/alert`, DB | Genera gli allarmi: treno fermo tra due stazioni, stazione non raggiungibile, ritardo sopra soglia. Avvisa i treni diretti verso una stazione guasta. |
+| REST API | HTTPS `/api/*` | DB, Fault Manager | Espone gli endpoint per la SPA e lo stream `/api/stream` per gli aggiornamenti in tempo reale. |
+| Persistence | | JDBC | Un DAO per ogni tabella. |
 
-**Thread:** callback di Paho (che passa il lavoro a un executor per non bloccarsi), thread pool di Javalin, scheduler per i watchdog e per l'alerting. I moduli condividono un **EventBus** in memoria (semplice publish/subscribe con `ConcurrentLinkedQueue` e listener) e il pool di connessioni al DB.
-
----
+Thread: la callback di Paho passa ogni messaggio a un executor, così non si blocca durante le query. Javalin usa il proprio pool di thread per le richieste HTTP e uno scheduler esegue i controlli periodici. I moduli si scambiano eventi tramite una piccola classe publish/subscribe in memoria e condividono il pool di connessioni al database.
 
 ## 4. Topic MQTT
 
-Il prefisso è sempre `rail/`. Il payload è JSON con i campi comuni `ts` (ISO-8601) e, dove serve, `eventId`.
+Tutti i topic iniziano con `rail/`. I messaggi sono in JSON e contengono sempre il campo `ts` (data e ora in formato ISO-8601); i messaggi che devono arrivare una sola volta in centrale hanno anche un `eventId`.
 
-| Topic | Da → A | QoS | Retained | Esempio di payload |
-|---|---|---|---|---|
-| `station/{S}/sensor/{sid}/detect` | Treno → Sensore | 1 | no | `{"trainId":"101","ts":…}` |
-| `station/{S}/sensor/{sid}/event` | Sensore → Stazione | 1 | no | `{"eventId":…,"sensor":"IN","trainId":"101","ts":…}` |
-| `station/{S}/sensor/{sid}/heartbeat` | Sensore → Stazione | 0 | no | `{"ts":…}` |
-| `station/{S}/transit` | Stazione → OCC | 1 | no | `{"eventId":…,"trainId":"101","type":"ENTRY","dir":"A","ts":…}` |
-| `station/{S}/heartbeat` | Stazione → OCC | 0 | no | `{"ts":…,"sensors":{"IN":"OK","OUT":"OK"}}` |
-| `station/{S}/status` | Stazione → OCC | 1 | **sì** (Last Will = `OFFLINE`) | `{"state":"ONLINE"}` |
-| `station/{S}/fault` | Stazione → OCC | 1 | no | `{"faultId":…,"kind":"TRACK_BROKEN","action":"OPEN"}` |
-| `occ/request/next-stop` | Stazione → OCC | 1 | no | `{"reqId":…,"stationId":"B","trainId":"101","dir":"A"}` |
-| `station/{S}/reply/next-stop` | OCC → Stazione | 1 | no | `{"reqId":…,"next":"C","travelTime":20}` oppure `{"next":null}` |
-| `station/{S}/cmd` | OCC → Stazione | 1 | no | `{"cmd":"DISPATCH","faultId":…,"etaSec":30}` / `{"cmd":"SUPPRESS","trainId":"101"}` |
-| `station/{S}/sim` | Demo → Stazione | 1 | no | `{"inject":"TRACK_BROKEN"}` |
-| `train/{id}/cmd` | Stazione → Treno | 1 | no | `{"cmd":"DEPART","next":"C","travelTime":20}` / `{"cmd":"HOLD","reason":…}` |
-| `train/{id}/alert` | OCC → Treno | 1 | no | `{"type":"DELAY","msg":…}` |
-| `train/{id}/telemetry` | Treno → OCC | 0 | no | `{"from":"B","to":"C","progress":0.4}` |
-| `alerts` | OCC → tutti | 1 | no | `{"severity":"HIGH","msg":"Stazione C fuori servizio"}` |
+| Topic | Mittente | Destinatario | QoS | Retained | Esempio |
+|---|---|---|---|---|---|
+| `station/{S}/sensor/{sid}/detect` | Treno | Sensore | 1 | no | `{"trainId":"101","ts":…}` |
+| `station/{S}/sensor/{sid}/event` | Sensore | Stazione | 1 | no | `{"eventId":…,"sensor":"IN","trainId":"101","ts":…}` |
+| `station/{S}/sensor/{sid}/heartbeat` | Sensore | Stazione | 0 | no | `{"ts":…}` |
+| `station/{S}/transit` | Stazione | OCC | 1 | no | `{"eventId":…,"trainId":"101","type":"ENTRY","dir":"A","ts":…}` |
+| `station/{S}/heartbeat` | Stazione | OCC | 0 | no | `{"ts":…,"sensors":{"IN":"OK","OUT":"OK"}}` |
+| `station/{S}/status` | Stazione | OCC | 1 | sì (Last Will `OFFLINE`) | `{"state":"ONLINE"}` |
+| `station/{S}/fault` | Stazione | OCC | 1 | no | `{"faultId":…,"kind":"TRACK_BROKEN","action":"OPEN"}` |
+| `occ/request/next-stop` | Stazione | OCC | 1 | no | `{"reqId":…,"stationId":"B","trainId":"101","dir":"A"}` |
+| `station/{S}/reply/next-stop` | OCC | Stazione | 1 | no | `{"reqId":…,"next":"C","travelTime":20}` |
+| `station/{S}/cmd` | OCC | Stazione | 1 | no | `{"cmd":"DISPATCH","faultId":…,"etaSec":30}` |
+| `station/{S}/sim` | Script di demo | Stazione | 1 | no | `{"inject":"TRACK_BROKEN"}` |
+| `train/{id}/cmd` | Stazione | Treno | 1 | no | `{"cmd":"DEPART","next":"C","travelTime":20}` |
+| `train/{id}/alert` | OCC | Treno | 1 | no | `{"type":"DELAY","msg":…}` |
+| `alerts` | OCC | Tutti | 1 | no | `{"severity":"HIGH","msg":"Stazione C fuori servizio"}` |
 
-**Sicurezza del broker:** Mosquitto ascolta solo sulla porta 8883 in TLS, con una CA del progetto. Ogni servizio si autentica con username e password. Le ACL limitano i topic: per esempio `station-B` può scrivere solo sotto `rail/station/B/#`, `rail/occ/request/#` e `rail/train/+/cmd`.
+Il campo `reqId` serve a collegare una risposta alla sua richiesta, perché MQTT non ha un meccanismo di richiesta e risposta.
 
----
+Mosquitto accetta connessioni solo sulla porta 8883 in TLS, con certificati firmati da una CA creata per il progetto. Ogni servizio ha un proprio utente e una password, e un file ACL stabilisce su quali topic può scrivere. Ad esempio, l'utente `station-B` può pubblicare solo su `rail/station/B/#`, `rail/occ/request/#` e `rail/train/+/cmd`.
 
-## 5. Affidabilità
+## 5. Gestione dei guasti
 
-| Problema | Soluzione |
+| Situazione | Come la gestiamo |
 |---|---|
-| La stazione perde la connessione con il broker | Sessione persistente (`cleanSession=false`) con QoS 1 e Local Buffer su file come seconda rete di sicurezza: i transiti vengono scritti nel buffer e rimossi solo dopo il `deliveryComplete` di Paho. |
-| Messaggi duplicati (QoS 1 = almeno una volta) | `eventId` UNIQUE nel DB: l'inserimento usa `ON CONFLICT DO NOTHING`, quindi è idempotente. |
-| Stazione morta (fail-stop) | Doppia rilevazione: il **Last Will** fa arrivare `OFFLINE` subito se cade la connessione TCP; il **timeout heartbeat** (3 battiti mancati) copre il caso in cui il processo è bloccato ma ancora connesso. |
-| Sensore morto | Watchdog della stazione, che passa a `DEGRADED` e lo comunica sullo `status`. |
-| Treno fermo tra due stazioni | L'Alerting controlla ogni 5 secondi: se `now > partenza + travelTime × 1.5` e non è arrivato l'`ENTRY`, scatta un allarme. |
-| Riavvio della centrale | Lo stato è nel DB. Gli `status` retained ricostruiscono subito la mappa delle stazioni. |
-
----
+| La stazione perde la connessione al broker | Usiamo QoS 1 con sessione persistente (`cleanSession=false`). In più la stazione scrive ogni transito sul buffer locale e lo cancella solo quando Paho ne conferma la consegna. |
+| La centrale riceve lo stesso messaggio due volte | Con QoS 1 può succedere. Nel database `eventId` è chiave primaria e l'inserimento usa `ON CONFLICT DO NOTHING`, quindi il duplicato viene ignorato. |
+| Una stazione si ferma | Se cade la connessione, il broker pubblica subito il Last Will `OFFLINE`. Se il processo è bloccato ma ancora connesso, la centrale se ne accorge dopo tre heartbeat mancati (15 secondi). |
+| Un sensore si ferma | Il watchdog della stazione lo rileva e la stazione comunica lo stato `DEGRADED`. |
+| Un treno resta fermo tra due stazioni | Ogni 5 secondi l'Alerting controlla i treni in viaggio. Se è passato più di una volta e mezzo il tempo di percorrenza previsto e non è arrivato l'ingresso nella stazione successiva, genera un allarme. |
+| La centrale si riavvia | Lo stato è salvato nel database, e i messaggi `status` retained permettono di sapere subito quali stazioni sono attive. |
 
 ## 6. Database
 
@@ -213,7 +217,6 @@ erDiagram
   TRAIN ||--o{ TRANSIT : genera
   STATION ||--o{ TRANSIT : registra
   STATION ||--o{ FAULT : subisce
-  APP_USER
 
   STATION { varchar id PK
             varchar name
@@ -262,37 +265,35 @@ erDiagram
              varchar role }
 ```
 
-- **Orario previsto:** `scheduled_ts` di una fermata = `scheduled_departure` + somma di (`travel_time` + `dwell`) delle fermate precedenti.
-- **Ritardo:** `delay = ts_reale − scheduled_ts`.
-- **Previsione di arrivo (ETA)** alla prossima stazione = `departed_at + travel_time + delay` attuale.
+Ogni tratta (`ROUTE`) ha un orario di partenza e un elenco ordinato di fermate (`ROUTE_STOP`) con il tempo di percorrenza dalla fermata precedente e il tempo di sosta. Da questi dati calcoliamo:
+- l'orario previsto a una fermata, cioè l'orario di partenza più la somma dei tempi di percorrenza e di sosta delle fermate precedenti;
+- il ritardo, cioè la differenza tra l'orario reale del transito e quello previsto;
+- l'arrivo stimato alla prossima stazione, cioè l'ora di partenza più il tempo di percorrenza più il ritardo attuale.
 
----
+## 7. API REST
 
-## 7. API REST (OCC)
-
-Si accede in HTTPS. L'autenticazione usa una sessione con cookie dopo il login; i ruoli sono `TECH` e `ADMIN`.
+Le API sono disponibili solo in HTTPS. Dopo il login il server crea una sessione con cookie. I ruoli sono due: `TECH` (tecnico) e `ADMIN` (amministratore).
 
 | Metodo | Percorso | Ruolo | Descrizione |
 |---|---|---|---|
-| POST | `/api/login`, `/api/logout` | – | Autenticazione |
+| POST | `/api/login`, `/api/logout` | tutti | Accesso e uscita |
 | GET | `/api/stations` | TECH, ADMIN | Stato di tutte le stazioni |
-| GET | `/api/stations/{id}/expected` | TECH, ADMIN | Treni attesi in ingresso e in uscita, con ETA |
-| GET | `/api/trains`, `/api/trains/{id}` | TECH, ADMIN | Posizione, stato, ritardo |
-| GET | `/api/routes`, `/api/routes/{id}` | TECH, ADMIN | Tratte con le fermate |
-| POST / PUT / DELETE | `/api/routes[/{id}]` | ADMIN | Crea, modifica o elimina una tratta (o le sue fermate) |
-| POST | `/api/trains/{id}/suppress` | ADMIN | Sopprime un treno fermo in stazione |
+| GET | `/api/stations/{id}/expected` | TECH, ADMIN | Treni attesi in ingresso e in uscita, con orario stimato |
+| GET | `/api/trains`, `/api/trains/{id}` | TECH, ADMIN | Posizione, stato e ritardo dei treni |
+| GET | `/api/routes`, `/api/routes/{id}` | TECH, ADMIN | Tratte e fermate |
+| POST, PUT, DELETE | `/api/routes[/{id}]` | ADMIN | Creazione, modifica ed eliminazione delle tratte |
+| POST | `/api/trains/{id}/suppress` | ADMIN | Soppressione di un treno fermo in stazione |
 | GET | `/api/faults?status=OPEN` | TECH, ADMIN | Guasti aperti |
-| POST | `/api/faults/{id}/dispatch` | TECH | Invia gli operatori |
-| GET | `/api/alerts`, POST `/api/alerts/{id}/ack` | TECH, ADMIN | Allarmi |
-| GET | `/api/stream` | TECH, ADMIN | Server-Sent Events con i cambi di stato in tempo reale |
+| POST | `/api/faults/{id}/dispatch` | TECH | Invio degli operatori |
+| GET | `/api/alerts` | TECH, ADMIN | Elenco degli allarmi |
+| POST | `/api/alerts/{id}/ack` | TECH, ADMIN | Presa visione di un allarme |
+| GET | `/api/stream` | TECH, ADMIN | Aggiornamenti in tempo reale (Server-Sent Events) |
 
-**SPA:** contiene una dashboard con la mappa della linea (stazioni colorate per stato e treni posizionati), la tabella dei treni con il ritardo, il pannello dei guasti con il pulsante "Invia operatori" (per il tecnico), il pannello degli allarmi e l'editor delle tratte (per l'admin).
+La SPA ha una pagina principale con la linea ferroviaria, dove ogni stazione è colorata in base al suo stato e i treni compaiono nella loro posizione. Sotto ci sono la tabella dei treni con il ritardo, l'elenco degli allarmi e l'elenco dei guasti con il pulsante "Invia operatori", visibile solo al tecnico. L'amministratore ha in più una pagina per modificare le tratte.
 
----
+## 8. Diagrammi di sequenza
 
-## 8. Flussi principali (diagrammi di sequenza)
-
-### 8.1 Transito normale con richiesta della prossima fermata
+### 8.1 Transito di un treno
 
 ```mermaid
 sequenceDiagram
@@ -316,7 +317,9 @@ sequenceDiagram
   T->>B: detect sul Sensore IN di C
 ```
 
-### 8.2 Disconnessione temporanea della stazione
+Quando un treno entra in stazione, la stazione chiede alla centrale qual è la prossima fermata. In questo modo, se l'amministratore modifica una tratta, il cambiamento vale già dalla fermata successiva.
+
+### 8.2 Disconnessione temporanea di una stazione
 
 ```mermaid
 sequenceDiagram
@@ -356,7 +359,7 @@ sequenceDiagram
   S->>T: cmd DEPART {...}
 ```
 
-### 8.4 Stazione morta senza disconnessione (processo bloccato)
+### 8.4 Stazione bloccata ma ancora connessa
 
 ```mermaid
 sequenceDiagram
@@ -367,8 +370,6 @@ sequenceDiagram
   O->>O: dopo 15s: D = DEAD
   O->>O: allarme HIGH e alert ai treni diretti verso D
 ```
-
----
 
 ## 9. Struttura del repository
 
@@ -386,31 +387,29 @@ PissirShared/
 │   ├── mosquitto/          mosquitto.conf, acl, passwd
 │   ├── certs/              script per generare CA e certificati
 │   └── db/schema.sql, seed.sql
-├── scenario.json           stazioni, treni, tratte per la demo
+├── scenario.json           stazioni, treni e tratte per la demo
 ├── launch.sh
 └── docs/
 ```
 
----
+## 10. Piano di lavoro
 
-## 10. Piano di lavoro suggerito
+1. Infrastruttura: docker-compose, Mosquitto inizialmente senza TLS, schema del database, modulo `common`.
+2. Primo percorso funzionante: sensori, stazione e treno su una linea A, B, C con tratte fisse. Controlliamo i messaggi con `mosquitto_sub -t 'rail/#' -v`.
+3. Centrale: ingestion e richiesta della prossima fermata, con salvataggio su database.
+4. Affidabilità: heartbeat, watchdog, Last Will, buffer locale, eliminazione dei duplicati.
+5. Guasti: simulazione, blocco dei treni, invio degli operatori, ripristino.
+6. API REST e SPA: login, pagina principale, aggiornamenti in tempo reale, modifica delle tratte.
+7. TLS su Mosquitto e HTTPS, ACL.
+8. Validazione: test unitari sul calcolo dei ritardi, sull'eliminazione dei duplicati e sugli stati della stazione, più uno scenario di prova per ogni diagramma della sezione 8.
 
-1. **Infrastruttura:** docker-compose, Mosquitto (prima senza TLS), schema del DB, modulo `common`.
-2. **Percorso minimo:** sensore, stazione e treno su una linea A–B–C con tratte fisse. Verificare i messaggi con `mosquitto_sub -t 'rail/#' -v`.
-3. **OCC:** ingestion e traffic logic (next-stop) con persistenza.
-4. **Affidabilità:** heartbeat, watchdog, Last Will, local buffer, deduplicazione.
-5. **Guasti:** iniezione, HOLD, dispatch, ripristino.
-6. **REST e SPA:** login, dashboard, SSE, editor delle tratte.
-7. **TLS** su Mosquitto e HTTPS, ACL.
-8. **Validazione:** test unitari (calcolo dei ritardi, deduplicazione, macchina a stati) e scenari di demo scritti, uno per ogni diagramma della sezione 8.
+## 11. Corrispondenza con la relazione
 
-## 11. Collegamento con la relazione
-
-| Capitolo della relazione | Sezioni di questo documento |
+| Capitolo della relazione | Dove trovare il materiale |
 |---|---|
-| 1. Specifiche funzionali | Testo del progetto e §3 (compiti dei servizi) |
-| 2. Analisi delle tecnologie | §1, alternative (REST polling vs MQTT, WebSocket, AMQP/RabbitMQ, CoAP) |
-| 3. Scelta dell'approccio | Perché un broker: disaccoppiamento, NAT traversal (solo connessioni in uscita dalle reti private), QoS, Last Will |
-| 4. Architettura | §2, §3 (esagoni), §4, §8 |
-| 5. Implementazione | §6, §7, diagrammi UML delle classi da produrre a codice scritto |
-| 6. Validazione | §10 punto 8 |
+| 1. Specifiche funzionali | Testo del progetto e sezione 3 |
+| 2. Analisi delle tecnologie | Sezione 1, più il confronto con le alternative: polling REST, WebSocket, AMQP con RabbitMQ, CoAP |
+| 3. Scelta dell'approccio | Motivi per usare un broker: i componenti sono disaccoppiati, le stazioni aprono solo connessioni in uscita (quindi funzionano dietro NAT senza configurare il router), QoS e Last Will sono già nel protocollo |
+| 4. Architettura | Sezioni 2, 3, 4 e 8 |
+| 5. Implementazione | Sezioni 6 e 7, più i diagrammi UML delle classi quando il codice sarà scritto |
+| 6. Validazione | Sezione 10, punto 8 |
