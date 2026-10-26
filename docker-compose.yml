@@ -1,0 +1,133 @@
+# Avvia tutto il sistema: docker compose up --build -d
+# Pagina della centrale: https://localhost:8443
+# Per avviare solo broker e database (sviluppo con launch.sh): docker compose up -d mosquitto postgres
+
+# Impostazioni comuni ai servizi Java
+x-app: &app
+  build: .
+  image: pissir-rail
+  restart: on-failure
+  volumes:
+    - ./infra/certs:/certs:ro
+  depends_on:
+    - mosquitto
+
+x-env: &env
+  MQTT_URL: ssl://mosquitto:8883
+  CA_FILE: /certs/ca.crt
+
+services:
+  # Crea CA e certificato alla prima esecuzione, poi termina
+  # (usa l'immagine dei servizi Java, che contiene già OpenSSL)
+  certs:
+    build: .
+    image: pissir-rail
+    volumes:
+      - ./infra/certs:/certs
+    command: sh -c "[ -f /certs/server.crt ] || bash /certs/genera-certificati.sh"
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./infra/mosquitto:/mosquitto/config:ro
+      - ./infra/certs:/mosquitto/certs:ro
+      - ./sim.sh:/usr/local/bin/sim:ro
+      - mosquitto-data:/mosquitto/data
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rail
+      POSTGRES_USER: rail
+      POSTGRES_PASSWORD: rail
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./infra/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -h localhost: durante l'inizializzazione Postgres accetta solo connessioni locali via socket
+      test: ["CMD-SHELL", "pg_isready -h localhost -U rail -d rail"]
+      interval: 2s
+      retries: 30
+
+  occ:
+    <<: *app
+    command: java -jar occ.jar
+    environment:
+      <<: *env
+      MQTT_USER: occ
+      MQTT_PASSWORD: occ2026
+      DB_URL: jdbc:postgresql://postgres:5432/rail
+      SERVER_CERT_FILE: /certs/server.crt
+      SERVER_KEY_FILE: /certs/server.key
+    ports:
+      - "8443:8443"
+    depends_on:
+      mosquitto:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  # Stazioni A, B, C con i loro sensori
+
+  station-a:
+    <<: *app
+    command: java -jar station.jar A
+    environment: { <<: *env, MQTT_USER: station, MQTT_PASSWORD: station2026 }
+  sensor-a-in:
+    <<: *app
+    command: java -jar sensor.jar A IN
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+  sensor-a-out:
+    <<: *app
+    command: java -jar sensor.jar A OUT
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+
+  station-b:
+    <<: *app
+    command: java -jar station.jar B
+    environment: { <<: *env, MQTT_USER: station, MQTT_PASSWORD: station2026 }
+  sensor-b-in:
+    <<: *app
+    command: java -jar sensor.jar B IN
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+  sensor-b-out:
+    <<: *app
+    command: java -jar sensor.jar B OUT
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+
+  station-c:
+    <<: *app
+    command: java -jar station.jar C
+    environment: { <<: *env, MQTT_USER: station, MQTT_PASSWORD: station2026 }
+  sensor-c-in:
+    <<: *app
+    command: java -jar sensor.jar C IN
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+  sensor-c-out:
+    <<: *app
+    command: java -jar sensor.jar C OUT
+    environment: { <<: *env, MQTT_USER: sensor, MQTT_PASSWORD: sensor2026 }
+
+  # Treni: partono dopo 20 secondi, quando stazioni e centrale sono pronte.
+  # A fine corsa il container termina; per ripetere il viaggio: docker compose start train-101 train-102
+
+  train-101:
+    <<: *app
+    command: sh -c "sleep 20 && exec java -jar train.jar 101 A A"
+    environment: { <<: *env, MQTT_USER: train, MQTT_PASSWORD: train2026 }
+  train-102:
+    <<: *app
+    command: sh -c "sleep 20 && exec java -jar train.jar 102 C R"
+    environment: { <<: *env, MQTT_USER: train, MQTT_PASSWORD: train2026 }
+
+volumes:
+  mosquitto-data:
+  postgres-data:

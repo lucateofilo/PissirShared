@@ -459,4 +459,4 @@ Gli scenari sul sistema completo sono:
 | Creazione, modifica ed eliminazione delle tratte, con controllo dei dati | superato |
 | Accesso senza login, password errate, connessioni senza TLS, permessi sui topic | superato |
 
-Per simulare i guasti durante la demo usiamo lo script `sim.sh`, che pubblica i comandi di simulazione sul broker.
+Per simulare i guasti durante la demo usiamo lo script `sim.sh`, installato nel container del broker, che pubblica i comandi di simulazione: ad esempio `docker compose exec mosquitto sim guasto B`.

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Avvia tutti i processi della demo.
-# Prima bisogna creare i certificati (infra/certs/genera-certificati.sh)
-# e avviare broker e database: docker compose -f infra/docker-compose.yml up -d
+# Avvia i servizi Java direttamente sul computer, senza Docker: utile durante lo sviluppo.
+# Prima bisogna avviare broker e database: docker compose up -d mosquitto postgres
 set -e
 cd "$(dirname "$0")"
 

@@ -38,7 +38,7 @@ Funzioni ed eventi richiesti dal testo del progetto, con il servizio che se ne o
 | Database | PostgreSQL con JDBC | |
 | Password | BCrypt (libreria jBCrypt) | Sul server salviamo solo l'hash della password. |
 | Interfaccia web | SPA in HTML e JavaScript, senza framework | La pagina chiama le API con `fetch` e rilegge i dati ogni 2 secondi. |
-| Avvio | Docker Compose per Mosquitto e Postgres | I servizi Java girano come processi separati, avviati da `launch.sh`. |
+| Avvio | Docker Compose | Un solo comando avvia broker, database e un container per ogni sensore, stazione, treno e per la centrale. |
 
 Rispetto alle varianti ammesse scegliamo la 1 (SPA), la 2 (login e password salvati sul server) e la 3 (database con JDBC). Nessuna delle tre comporta penalità. Usiamo TLS sia su MQTT sia su HTTP, e ogni stazione è un processo separato.
 
@@ -93,9 +93,9 @@ Durante la demo sono attivi questi processi:
 | `StationNode` | 1 per stazione | `station` |
 | `TrainAgent` | 1 per treno | `train` |
 | `OccServer` | 1 | `occ` |
-| Mosquitto, Postgres | 1 ciascuno | Docker |
+| Mosquitto, Postgres | 1 ciascuno | |
 
-Lo script `launch.sh` compila il progetto e avvia tutti i processi. L'elenco delle stazioni e dei treni da avviare è scritto all'inizio dello script.
+`docker compose up` avvia ogni processo in un container separato, tutti a partire dalla stessa immagine con i jar dei servizi (`Dockerfile`). Al primo avvio un container crea anche i certificati. Durante lo sviluppo lo script `launch.sh` avvia gli stessi processi direttamente sul computer.
 
 ## 3. Servizi
 
@@ -419,6 +419,8 @@ sequenceDiagram
 ```
 PissirShared/
 ├── pom.xml                 progetto Maven principale
+├── Dockerfile              compila il progetto e crea l'immagine dei servizi Java
+├── docker-compose.yml      avvia tutto il sistema
 ├── common/                 client MQTT con TLS, nomi dei topic, messaggi
 ├── sensor/                 SensorAgent
 ├── station/                StationNode
@@ -426,13 +428,11 @@ PissirShared/
 ├── occ/                    OccServer: ingestion/, traffic/, fault/, alerting/, api/, db/
 │   └── src/main/resources/public/   SPA (index.html, app.js, style.css)
 ├── infra/
-│   ├── docker-compose.yml  Mosquitto e Postgres
 │   ├── mosquitto/          configurazione, utenti (passwd) e permessi (acl)
 │   ├── certs/              script per creare CA e certificato
 │   └── db/                 schema.sql, seed.sql
-├── launch.sh               avvia tutti i processi della demo
-├── stop.sh                 li ferma
-├── sim.sh                  simula guasti durante la demo
+├── launch.sh, stop.sh      avviano e fermano i servizi Java senza Docker (sviluppo)
+├── sim.sh                  simula guasti durante la demo (gira nel container del broker)
 └── docs/
 ```
 
