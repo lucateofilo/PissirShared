@@ -15,6 +15,43 @@ Progetto PISSIR 2025/26: sistema di monitoraggio e gestione del traffico ferrovi
 
 Gli script sono in bash: su Windows vanno lanciati da Git Bash o da WSL.
 
+### Installazione
+
+Windows (PowerShell come amministratore; poi riavviare e aprire Docker Desktop):
+
+```powershell
+winget install EclipseAdoptium.Temurin.21.JDK
+winget install Apache.Maven
+winget install Git.Git
+winget install Docker.DockerDesktop
+```
+
+Su Windows gli script del progetto si lanciano da Git Bash, che include anche OpenSSL.
+
+macOS (con [Homebrew](https://brew.sh); poi aprire Docker dalle Applicazioni):
+
+```bash
+brew install openjdk@21 maven git
+brew install --cask docker
+```
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install openjdk-21-jdk maven git openssl docker.io docker-compose-v2
+sudo usermod -aG docker $USER   # per usare docker senza sudo; poi uscire e rientrare
+```
+
+Per controllare che sia tutto installato:
+
+```bash
+java -version            # deve indicare la versione 21
+mvn -v
+docker compose version
+openssl version
+```
+
 ## Avvio
 
 ```bash
