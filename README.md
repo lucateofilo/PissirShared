@@ -40,8 +40,14 @@ Per fermare i processi: `./stop.sh`. Per fermare broker e database: `docker comp
 ## Stato
 
 Funziona il percorso base: i treni viaggiano sulla linea A, B, C seguendo le tratte del database,
-la centrale registra i transiti e lo stato delle stazioni, la pagina web mostra stazioni e treni.
+la centrale registra i transiti, calcola ritardi e arrivi previsti e tiene lo stato delle stazioni.
+La pagina web mostra stazioni e treni.
 
 Da fare, nell'ordine del piano di lavoro (sezione 10 del documento):
-calcolo dei ritardi, buffer locale e watchdog degli heartbeat, guasti e allarmi,
-login e API complete, TLS.
+buffer locale e watchdog degli heartbeat, guasti e allarmi, login e API complete, TLS.
+
+## Test
+
+```bash
+mvn test
+```

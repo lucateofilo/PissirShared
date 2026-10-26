@@ -15,16 +15,17 @@ public class TransitDao {
     }
 
     /**
-     * Salva un transito. Se l'eventId è già presente (messaggio ricevuto due volte)
-     * non fa nulla e restituisce false.
+     * Salva un transito con il suo orario previsto e il ritardo (null se non calcolabili).
+     * Se l'eventId è già presente (messaggio ricevuto due volte) non fa nulla e restituisce false.
      */
-    public boolean insert(Transit t) {
+    public boolean insert(Transit t, Instant scheduled, Integer delaySec) {
         int rows = db.update("""
-                INSERT INTO transit (event_id, train_id, station_id, type, ts)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO transit (event_id, train_id, station_id, type, ts, scheduled_ts, delay_sec)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (event_id) DO NOTHING""",
                 UUID.fromString(t.eventId()), t.trainId(), t.stationId(), t.type(),
-                Timestamp.from(Instant.parse(t.ts())));
+                Timestamp.from(Instant.parse(t.ts())),
+                scheduled == null ? null : Timestamp.from(scheduled), delaySec);
         return rows == 1;
     }
 }

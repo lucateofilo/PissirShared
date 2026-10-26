@@ -32,16 +32,20 @@ public class TrafficLogic {
 
     private void onRequest(String payload) {
         NextStopRequest req = Json.parse(payload, NextStopRequest.class);
-        RouteDao.NextStop stop = routes.findNextStop(req.trainId(), req.dir(), req.stationId());
+        Schedule schedule = routes.findSchedule(req.trainId(), req.dir());
 
         NextStopReply reply;
-        if (stop == null) {
+        if (schedule == null || !schedule.contains(req.stationId())) {
             // La stazione non è nella tratta del treno: lo trattiamo come capolinea
             log.warn("Stazione {} non presente nella tratta {} del treno {}", req.stationId(), req.dir(), req.trainId());
             reply = new NextStopReply(req.reqId(), req.trainId(), null, 0, 0);
         } else {
-            reply = new NextStopReply(req.reqId(), req.trainId(), stop.nextStation(), stop.travelTimeSec(), stop.dwellSec());
-            trains.setNextStation(req.trainId(), stop.nextStation());
+            Schedule.Stop next = schedule.next(req.stationId());
+            int dwell = schedule.stop(req.stationId()).dwellSec();
+            reply = next == null
+                    ? new NextStopReply(req.reqId(), req.trainId(), null, 0, dwell)
+                    : new NextStopReply(req.reqId(), req.trainId(), next.stationId(), next.travelTimeSec(), dwell);
+            trains.setNextStation(req.trainId(), next == null ? null : next.stationId());
         }
         mqtt.publish(Topics.stationNextStopReply(req.stationId()), reply, 1, false);
     }
