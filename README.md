@@ -11,7 +11,7 @@ Progetto PISSIR 2025/26: sistema di monitoraggio e gestione del traffico ferrovi
 Serve solo Docker Desktop: Java, Maven e i certificati sono gestiti dentro i container.
 
 1. Installare [Docker Desktop](https://www.docker.com/products/docker-desktop/) e aprirlo.
-2. Scaricare il progetto, con `git clone` oppure come [ZIP](https://github.com/lucateofilo/PissirShared/archive/refs/heads/claude/ciao-aw87py.zip) da estrarre.
+2. Scaricare il progetto con `git clone` (branch `sviluppo`).
 3. Aprire un terminale nella cartella del progetto (su Windows va bene PowerShell) e lanciare:
 
 ```bash
